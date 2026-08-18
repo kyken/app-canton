@@ -597,23 +597,27 @@ def _onboard_party_expect_error(
     assert e.value.status == expected_error
 
 
-def test_sign_onboarding_expect_error_unexpected_participant_id(
+def test_sign_onboarding_accepts_unrecognized_participant_id(
     backend: BackendInterface,
+    scenario_navigator: NavigateWithScenario,
 ) -> None:
-    _onboard_party_expect_error(
+    _onboard_party(
         backend,
-        validator_uids=[MAINNET_VALIDATOR_PARTY_ID_1, "invalid_validator_id_2"],
-        expected_error=Errors.SW_TOPOLOGY_UNEXPECTED_PARTICIPANT_ID,
+        scenario_navigator,
+        validator_uids=["invalid_validator_id_1", "invalid_validator_id_2"],
+        snapshot_check=False,
     )
 
 
-def test_sign_onboarding_expect_error_unexpected_participant_id_single(
+def test_sign_onboarding_accepts_more_than_two_participants(
     backend: BackendInterface,
+    scenario_navigator: NavigateWithScenario,
 ) -> None:
-    _onboard_party_expect_error(
+    _onboard_party(
         backend,
-        validator_uids=[DEVNET_VALIDATOR_PARTY_ID_2],
-        expected_error=Errors.SW_TOPOLOGY_UNEXPECTED_PARTICIPANT_ID,
+        scenario_navigator,
+        validator_uids=["participant_id_1", "participant_id_2", "participant_id_3"],
+        snapshot_check=False,
     )
 
 
@@ -627,17 +631,23 @@ def test_sign_onboarding_expect_error_unexpected_threshold(
     )
 
 
-def test_sign_onboarding_expect_error_unexpected_number_of_participants(
+def test_sign_onboarding_expect_error_missing_participant_data_for_zero_participants(
     backend: BackendInterface,
 ) -> None:
     _onboard_party_expect_error(
         backend,
-        validator_uids=[
-            MAINNET_VALIDATOR_PARTY_ID_1,
-            MAINNET_VALIDATOR_PARTY_ID_2,
-            "extra_validator_id_3",
-        ],
-        expected_error=Errors.SW_TOPOLOGY_UNEXPECTED_NUMBER_OF_PARTICIPANTS,
+        validator_uids=[],
+        expected_error=Errors.SW_TOPOLOGY_MISSING_PARTICIPANT_DATA,
+    )
+
+
+def test_sign_onboarding_expect_error_missing_participant_data_for_empty_id(
+    backend: BackendInterface,
+) -> None:
+    _onboard_party_expect_error(
+        backend,
+        validator_uids=[""],
+        expected_error=Errors.SW_TOPOLOGY_MISSING_PARTICIPANT_DATA,
     )
 
 
