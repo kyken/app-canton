@@ -13,6 +13,9 @@
  *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
+ *
+ *  Modification notice: This file was modified for app-canton.
+ *  Changes: Removed the fixed participant ID allowlist and participant count limit.
  *****************************************************************************/
 
 #include <stdint.h>   // uint*_t
@@ -67,73 +70,10 @@ typedef struct {
     bool found;                    // Mutable state
 } field_state_t;
 
-typedef struct {
-    const char *participant_id;
-    const char *participant_name;
-} participant_id_to_name_mapping_t;
-
-typedef struct {
-    const participant_id_to_name_mapping_t *mappings;
-    size_t count;
-} valid_participants_config_t;
-
 #define PARTY_FIELD_IDX         0
 #define PARTICIPANT_1_FIELD_IDX 1
 #define PARTICIPANT_2_FIELD_IDX 2
-#define MAX_PARTICIPANTS_NB     2
 #define THRESHOLD_FIELD_IDX     3
-
-const participant_id_to_name_mapping_t MAINNET_SINGLE_VALIDATOR[] = {
-    {"ledger-ledgerops-2::12207a4859ad414f4f47c2d773ddf4ea88de8c3a1aab19abaa197e504acdbf679d3c",
-     "Ledger Validator"},
-};
-
-const participant_id_to_name_mapping_t MAINNET_DUAL_VALIDATORS[] = {
-    {"ledger-ledgerops-2::12207a4859ad414f4f47c2d773ddf4ea88de8c3a1aab19abaa197e504acdbf679d3c",
-     "Ledger Validator"},
-    {"Ledger-Kiln-2::1220e2225d5a297fae4000be2e3ca560ce802461da04c8e3e40c9fbbf0547f4fe8e3",
-     "Kiln Validator"},
-};
-
-const participant_id_to_name_mapping_t TESTNET_SINGLE_VALIDATOR[] = {
-    {"ledger-ledgeropstestnet-0::"
-     "122095f38f5c73cc18fbeb3290f8c17f7a1ff190f66fe159c671cf1fb0dc634eedaf",
-     "Ledger Testnet\nValidator"},
-};
-
-const participant_id_to_name_mapping_t TESTNET_DUAL_VALIDATORS[] = {
-    {"ledger-ledgeropstestnet-0::"
-     "122095f38f5c73cc18fbeb3290f8c17f7a1ff190f66fe159c671cf1fb0dc634eedaf",
-     "Ledger Testnet\nValidator"},
-    {"Ledger-KilnTestnet-2::"
-     "1220fa9df3caa84092023bf7edf28de1d28f96caf9b7d130385bfe6e284be6e0fbd7",
-     "Kiln Testnet\nValidator"},
-};
-
-const participant_id_to_name_mapping_t DEVNET_SINGLE_VALIDATOR[] = {
-    {"ledger-ledgeropsdevnet-0::"
-     "12208f74f551f8c28b68414fc3bb4b8466178055845485878a1af8ac1fe96f88fad2",
-     "Ledger Devnet\nValidator"},
-};
-
-const participant_id_to_name_mapping_t DEVNET_DUAL_VALIDATORS[] = {
-    {"ledger-ledgeropsdevnet-0::"
-     "12208f74f551f8c28b68414fc3bb4b8466178055845485878a1af8ac1fe96f88fad2",
-     "Ledger Devnet\nValidator"},
-    {"Ledger-KilnDevnet-2::12203b77e5d74eb787ff0251fd76949379a625368646302a203fea7f7db1dd5402bf",
-     "Kiln Devnet\nValidator"},
-};
-
-const valid_participants_config_t VALID_PARTICIPANTS_CONFIGS[] = {
-    {MAINNET_SINGLE_VALIDATOR,
-     sizeof(MAINNET_SINGLE_VALIDATOR) / sizeof(MAINNET_SINGLE_VALIDATOR[0])},
-    {MAINNET_DUAL_VALIDATORS, sizeof(MAINNET_DUAL_VALIDATORS) / sizeof(MAINNET_DUAL_VALIDATORS[0])},
-    {TESTNET_SINGLE_VALIDATOR,
-     sizeof(TESTNET_SINGLE_VALIDATOR) / sizeof(TESTNET_SINGLE_VALIDATOR[0])},
-    {TESTNET_DUAL_VALIDATORS, sizeof(TESTNET_DUAL_VALIDATORS) / sizeof(TESTNET_DUAL_VALIDATORS[0])},
-    {DEVNET_SINGLE_VALIDATOR, sizeof(DEVNET_SINGLE_VALIDATOR) / sizeof(DEVNET_SINGLE_VALIDATOR[0])},
-    {DEVNET_DUAL_VALIDATORS, sizeof(DEVNET_DUAL_VALIDATORS) / sizeof(DEVNET_DUAL_VALIDATORS[0])},
-};
 
 // Const configurations (stored in flash)
 const field_config_t PARTY_FIELD_CONFIG = {"Add account", true};
@@ -231,10 +171,6 @@ MUST_CHECK bool process_untyped_versioned_msg_tx_init(buffer_t *cdata) {
 
     uint8_t chain_code[MAX_CHAINCODE_LEN] = {0};
     init_hash_storage();
-    LEDGER_ASSERT(
-        init_transaction_pairs(&G_context.tx_info, ONBOARDING_FLOW_DISPLAY_FIELDS_NB) == true,
-        "Failed to initialize transaction pairs");
-    G_context.tx_info.pairs_count = 0;
     has_parsed_namespace_delegation = false;
     has_parsed_party_to_participant = false;
     has_parsed_party_to_key_mapping = false;
@@ -374,11 +310,10 @@ MUST_CHECK static bool set_field_value(transaction_ctx_t *tx_info,
     LEDGER_ASSERT(tx_info != NULL, "Null tx_ctx in set_field_value");
     LEDGER_ASSERT(value != NULL, "Null value passed to set_field_value");
 
-    uint8_t idx = tx_info->pairs_count;
+    size_t idx = tx_info->pairs_count;
 
     // Input validation
-    if (idx >= ONBOARDING_FLOW_DISPLAY_FIELDS_NB ||
-        field_idx >= ONBOARDING_FLOW_DISPLAY_FIELDS_NB || value == NULL) {
+    if (field_idx >= ONBOARDING_FLOW_DISPLAY_FIELDS_NB || value == NULL) {
         return false;
     }
 
@@ -523,74 +458,48 @@ static int process_party_to_participant(const PartyToParticipant *mapping,
         return SW_TOPOLOGY_PARTY_ID_MISMATCH;
     }
 
-    if (mapping->participants_count > MAX_PARTICIPANTS_NB) {
-        return SW_TOPOLOGY_UNEXPECTED_NUMBER_OF_PARTICIPANTS;
-    }
-
     if (mapping->threshold != mapping->participants_count) {
         return SW_TOPOLOGY_UNEXPECTED_THRESHOLD_VALUE;
     }
 
-    if (mapping->participants_count > 0 && mapping->participants == NULL) {
+    if (mapping->participants_count == 0 || mapping->participants == NULL) {
         return SW_TOPOLOGY_MISSING_PARTICIPANT_DATA;
     }
+
+    for (size_t j = 0; j < mapping->participants_count; j++) {
+        const char *uid = (const char *) PIC(mapping->participants[j].participant_uid);
+        if (uid == NULL || *uid == '\0') {
+            return SW_TOPOLOGY_MISSING_PARTICIPANT_DATA;
+        }
+        for (size_t k = 0; k < j; k++) {
+            const char *previous_uid =
+                (const char *) PIC(mapping->participants[k].participant_uid);
+            if (strcmp(uid, previous_uid) == 0) {
+                return SW_TOPOLOGY_UNEXPECTED_DUPLICATE_PARTICIPANT;
+            }
+        }
+    }
+
+    size_t display_pairs_count = 1 + mapping->participants_count;
+    if (mapping->threshold > 1) {
+        display_pairs_count++;
+    }
+    cleanup_display_items();
+    LEDGER_ASSERT(init_transaction_pairs(tx_info, display_pairs_count) == true,
+                  "Failed to initialize transaction pairs");
 
     // Set party field
     LEDGER_ASSERT(set_field_value(tx_info, PARTY_FIELD_IDX, mapping->party) == true,
                   "Failed to set party field");
 
-    size_t configs_count =
-        sizeof(VALID_PARTICIPANTS_CONFIGS) / sizeof(VALID_PARTICIPANTS_CONFIGS[0]);
     size_t pc = mapping->participants_count;
-    uint8_t found_valid = 0;
-    bool matched_valid[MAX_PARTICIPANTS_NB] = {false};
-    char *participant_names[MAX_PARTICIPANTS_NB] = {NULL};
 
-    for (size_t i = 0; i < configs_count; i++) {
-        found_valid = 0;
-        memset(matched_valid, 0, sizeof(matched_valid));
-        memset(participant_names, 0, sizeof(participant_names));
-
-        valid_participants_config_t config = VALID_PARTICIPANTS_CONFIGS[i];
-
-        if (config.count == pc) {
-            for (size_t j = 0; j < pc; j++) {
-                const char *uid = (const char *) PIC(mapping->participants[j].participant_uid);
-                if (uid == NULL || *uid == '\0') {
-                    return SW_TOPOLOGY_MISSING_PARTICIPANT_DATA;
-                }
-                for (size_t k = 0; k < config.count; k++) {
-                    participant_id_to_name_mapping_t *mappings =
-                        (participant_id_to_name_mapping_t *) PIC(config.mappings);
-                    const char *valid_id = (const char *) PIC(mappings[k].participant_id);
-                    const char *valid_name = (const char *) PIC(mappings[k].participant_name);
-                    if (strcmp(uid, valid_id) == 0) {
-                        if (matched_valid[k]) {
-                            return SW_TOPOLOGY_UNEXPECTED_DUPLICATE_PARTICIPANT;
-                        }
-                        matched_valid[k] = true;
-                        found_valid++;
-                        participant_names[j] = (char *) valid_name;
-                        break;
-                    }
-                }
-            }
-        }
-        if (found_valid == pc) {
-            break;  // Found a matching config, no need to check further
-        }
-    }
-
-    // Final check for missing mandatory participants
-    if (found_valid != pc) {
-        return SW_TOPOLOGY_UNEXPECTED_PARTICIPANT_ID;
-    }
-
-    // Set participant name fields
+    // Set participant UID fields
     for (size_t j = 0; j < pc; j++) {
         size_t field_idx = (j == 0) ? PARTICIPANT_1_FIELD_IDX : PARTICIPANT_2_FIELD_IDX;
-        LEDGER_ASSERT(set_field_value(tx_info, field_idx, participant_names[j]) == true,
-                      "Failed to set participant name field");
+        const char *uid = (const char *) PIC(mapping->participants[j].participant_uid);
+        LEDGER_ASSERT(set_field_value(tx_info, field_idx, uid) == true,
+                      "Failed to set participant UID field");
     }
 
     // When only one participant, use singular label instead of "Associate to validator 1"
